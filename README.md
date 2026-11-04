@@ -1,5 +1,7 @@
 # k8s-admission-guard
 
+[![CI](https://github.com/yliucherish/k8s-admission-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/yliucherish/k8s-admission-guard/actions/workflows/ci.yml)
+
 一个最小可用的 Kubernetes **Validating Admission Webhook**：在 Pod 被创建之前，
 按策略拒绝高危配置。
 
