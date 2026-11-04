@@ -1,0 +1,9 @@
+# 仓库内一律存 LF；Windows 检出也不转成 CRLF。
+# 理由：CI 在 Linux 上跑 `gofmt -l`，一旦工作副本是 CRLF，每个文件都会被判成
+# 未格式化，而本地又看不出来——这类"只有 CI 红"的问题排查成本极高。
+* text=auto eol=lf
+
+# 这几种是二进制，别让 git 去猜编码
+*.png binary
+*.jpg binary
+*.pem binary

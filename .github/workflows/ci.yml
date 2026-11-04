@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false # 零第三方依赖，没有 go.sum 可缓存；开着反而报错
+
+      # 格式先于逻辑：gofmt 不过就不必往下跑了。
+      # 依赖 .gitattributes 里的 eol=lf，否则 Windows 检出会全是 CRLF 假阳性。
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+          echo "gofmt OK"
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build -o /dev/null ./...
+
+      # -race 是这套代码的门槛：admission handler 与策略引擎都会被
+      # apiserver 并发调用，没有 race 检测等于没测。
+      - name: Test (with race detector)
+        run: go test -race -count=1 ./...
+
+      # 单元测试覆盖不到"字符串 <-> 镜像引用"这类组合问题：
+      # 之前 registry.k8s.io 被误判违规，就是这条样例跑出来的，不是单测发现的。
+      - name: End-to-end policy check on sample pods
+        run: go run ./cmd/checkpod --samples deploy/samples/pods.json
+
+      # 镜像大小是这个项目的卖点之一（两阶段 + scratch，实测 9.09 MB）。
+      # 用 CI 守住它，免得哪天有人手滑把 base 换回 alpine 却没人发现。
+      - name: Docker image builds and stays small
+        run: |
+          docker build -t guard:ci .
+          size=$(docker image inspect guard:ci --format '{{.Size}}')
+          limit=$((15 * 1024 * 1024))
+          printf '镜像大小：%s 字节（上限 %s）\n' "$size" "$limit"
+          if [ "$size" -gt "$limit" ]; then
+            echo "镜像超过 15 MB，检查 Dockerfile 是否退化成非 scratch 基底"
+            exit 1
+          fi
