@@ -58,7 +58,7 @@ go run ./cmd/checkpod -samples deploy/samples/pods.json   # 12 条样例判定
 
 ---
 
-## 3. 三个设计取舍（面试真正会问的地方）
+## 3. 三个设计取舍
 
 ### 取舍一：`failurePolicy: Fail` 还是 `Ignore`
 
@@ -224,7 +224,7 @@ legit-app   1/1     Running   0          8s
 
 ---
 
-## 5. 已知局限（写在这里，不藏着）
+## 5. 已知局限
 
 1. **自签证书会过期。** `gen-cert.sh` 生成的是 365 天自签证书，不会自动轮转。
    过期那天 webhook 挂掉、`failurePolicy: Fail`、集群建不了 Pod。
@@ -247,21 +247,8 @@ legit-app   1/1     Running   0          8s
 
 ---
 
-## 6. 面试可以怎么讲
 
-> 我写了一个 K8s 准入 webhook 来拦高危 Pod。写之前我先确认了 PSA 已经覆盖
-> privileged、runAsNonRoot、hostPath 这几条，所以我没把它包装成"新防护"——
-> 它的价值是走通 webhook 这条扩展路径，外加一条 PSA 做不到的镜像仓库白名单。
->
-> 实现上有三个坑我特意处理了：一是 `initContainers` 和 `ephemeralContainers`
-> 也要查，只查 `containers` 的话 `kubectl debug` 插进去的特权容器就漏了；
-> 二是 `runAsUser` 容器级覆盖 Pod 级，写反会同时漏放和误拦；
-> 三是 webhook 本身是同步调用 + `failurePolicy: Fail`，它挂了集群就建不了 Pod，
-> 所以我给它配了 PDB、双副本、系统命名空间豁免，并且先跑 observe 模式再切强制。
-
----
-
-## 7. 目录
+## 6. 目录
 
 ```
 k8s-admission-guard/
