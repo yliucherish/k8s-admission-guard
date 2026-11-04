@@ -1,0 +1,22 @@
+# 证书与私钥——绝不进仓库。
+# gen-cert.sh 会在 deploy/ 下生成这些文件，它们是演示用的自签材料，
+# 一旦被提交，别人 clone 下来就能冒充这个 webhook 的 TLS 身份。
+deploy/*.crt
+deploy/*.key
+deploy/*.csr
+deploy/*.srl
+deploy/*.cnf
+
+# 本地二进制（必须带前导斜杠锚定到仓库根）。
+#
+# 踩过的坑：写成 `webhook` 时，git 会匹配**任意层级**下叫 webhook 的文件**或目录**，
+# 于是 cmd/webhook/ 整个目录被静默忽略，两个 main 包根本没进版本库，
+# 而 go build ./... 在本地照样成功，完全看不出来。加 `/` 才是根目录下的文件。
+/bin/
+/webhook
+/checkpod
+/k8s-admission-guard
+
+# 测试与运行产物
+out/
+*.log

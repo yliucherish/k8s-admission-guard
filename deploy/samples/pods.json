@@ -1,0 +1,237 @@
+[
+  {
+    "name": "privileged-container",
+    "expect": "deny",
+    "wantRules": ["privileged-container"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "debug-shell", "namespace": "default" },
+      "spec": {
+        "containers": [
+          {
+            "name": "shell",
+            "image": "nginx:1.27",
+            "securityContext": { "privileged": true }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "privileged-in-initContainer",
+    "expect": "deny",
+    "wantRules": ["privileged-container"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "sneaky-init", "namespace": "default" },
+      "spec": {
+        "initContainers": [
+          {
+            "name": "setup",
+            "image": "registry.k8s.io/busybox:1.36",
+            "securityContext": { "privileged": true }
+          }
+        ],
+        "containers": [
+          { "name": "app", "image": "nginx:1.27" }
+        ]
+      }
+    }
+  },
+  {
+    "name": "hostpath-docker-sock",
+    "expect": "deny",
+    "wantRules": ["hostpath-mount"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "sock-mounter", "namespace": "default" },
+      "spec": {
+        "volumes": [
+          { "name": "sock", "hostPath": { "path": "/var/run/docker.sock" } }
+        ],
+        "containers": [
+          {
+            "name": "app",
+            "image": "nginx:1.27",
+            "volumeMounts": [
+              { "name": "sock", "mountPath": "/var/run/docker.sock" }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "hostpath-etc",
+    "expect": "deny",
+    "wantRules": ["hostpath-mount"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "etcd-dumper", "namespace": "default" },
+      "spec": {
+        "volumes": [
+          { "name": "hostetc", "hostPath": { "path": "/etc", "type": "Directory" } }
+        ],
+        "containers": [
+          { "name": "app", "image": "nginx:1.27" }
+        ]
+      }
+    }
+  },
+  {
+    "name": "run-as-root-uid0",
+    "expect": "deny",
+    "wantRules": ["run-as-root"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "rooty", "namespace": "default" },
+      "spec": {
+        "securityContext": { "runAsNonRoot": true },
+        "containers": [
+          {
+            "name": "app",
+            "image": "nginx:1.27",
+            "securityContext": { "runAsUser": 0 }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "run-as-nonroot-false",
+    "expect": "deny",
+    "wantRules": ["run-as-root"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "explicit-root", "namespace": "default" },
+      "spec": {
+        "containers": [
+          {
+            "name": "app",
+            "image": "nginx:1.27",
+            "securityContext": { "runAsNonRoot": false }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "untrusted-image-registry",
+    "expect": "deny",
+    "wantRules": ["untrusted-image-registry"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "off-registry", "namespace": "default" },
+      "spec": {
+        "securityContext": { "runAsNonRoot": true },
+        "containers": [
+          { "name": "app", "image": "quay.io/unknown/backdoor:1.0" }
+        ]
+      }
+    }
+  },
+  {
+    "name": "clean-pod",
+    "expect": "allow",
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "good-app", "namespace": "default" },
+      "spec": {
+        "securityContext": { "runAsNonRoot": true, "runAsUser": 10001 },
+        "containers": [
+          {
+            "name": "app",
+            "image": "ghcr.io/yliucherish/demo-app:1.4.2",
+            "securityContext": { "runAsNonRoot": true, "runAsUser": 10001 }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "exempt-by-annotation",
+    "expect": "allow",
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": {
+        "name": "privileged-debug",
+        "namespace": "default",
+        "annotations": { "admission-guard.example.com/exempt": "true" }
+      },
+      "spec": {
+        "containers": [
+          {
+            "name": "shell",
+            "image": "nginx:1.27",
+            "securityContext": { "privileged": true }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "exempt-namespace-kube-system",
+    "expect": "allow",
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "cni-daemonset-pod", "namespace": "kube-system" },
+      "spec": {
+        "volumes": [
+          { "name": "cni", "hostPath": { "path": "/etc/cni/net.d" } }
+        ],
+        "containers": [
+          {
+            "name": "cni",
+            "image": "registry.k8s.io/busybox:1.36",
+            "securityContext": { "privileged": true }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "delete-is-not-blocked",
+    "expect": "allow",
+    "operation": "DELETE",
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "already-privileged", "namespace": "default" },
+      "spec": {
+        "containers": [
+          {
+            "name": "shell",
+            "image": "nginx:1.27",
+            "securityContext": { "privileged": true }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "undeclared-user-default-mode",
+    "expect": "allow",
+    "expectStrict": "deny",
+    "wantRulesStrict": ["run-as-root"],
+    "pod": {
+      "apiVersion": "v1",
+      "kind": "Pod",
+      "metadata": { "name": "lazy-helm-chart", "namespace": "default" },
+      "spec": {
+        "containers": [
+          { "name": "app", "image": "nginx:1.27" }
+        ]
+      }
+    }
+  }
+]

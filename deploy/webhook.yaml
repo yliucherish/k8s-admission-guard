@@ -1,0 +1,48 @@
+# caBundle 必须是 CA 证书的 base64（单行）。
+# 用 gen-cert.sh 生成后：
+#   ./deploy/gen-cert.sh
+#   CA_BUNDLE=$(base64 -w0 deploy/ca.crt)          # Linux
+#   CA_BUNDLE=$(base64 -w0 deploy/ca.crt)          # Git Bash / macOS 亦可
+#   sed "s|\${CA_BUNDLE}|$CA_BUNDLE|" deploy/webhook.yaml | kubectl apply -f -
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: k8s-guard
+webhooks:
+  - name: pods.k8s-guard.example.com
+    admissionReviewVersions: ["v1"]
+    # sideEffects: None 是硬性要求。声明错了，kubectl --dry-run=server 会被拒，
+    # 而且 apiserver 会认为这个 webhook 有副作用，不敢在 dry-run 时调用。
+    sideEffects: None
+    # None 表示不修改对象（只判定）。Validating webhook 必须是 None。
+    matchPolicy: Equivalent
+    # Fail 还是 Ignore，是这个项目最重要的可用性取舍，见 README「已知局限」。
+    # Fail：webhook 不可用时拒绝创建 Pod —— 安全但会造成集群级故障。
+    # Ignore：webhook 不可用时放行 —— 可用但等于把安全门敞开。
+    # 这里选 Fail，并用下面的 namespaceSelector 把系统命名空间排除掉，
+    # 保证 CNI / CoreDNS 这类组件在 webhook 挂掉时仍能重建。
+    failurePolicy: Fail
+    # 同步调用，超时会拖住 apiserver 的 worker。5 秒是常见取值，不要设成 30。
+    timeoutSeconds: 5
+    rules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+        scope: Namespaced
+    # 只对带 guard=enforce 标签的命名空间生效。
+    # 这是灰度手段：先把新命名空间标上标签验证，再逐批推广。
+    # 配合代码里的 -exempt-namespaces，形成"配置层 + 代码层"双重豁免——
+    # 看起来重复，但配置写错时还有代码兜底，反之亦然。
+    namespaceSelector:
+      matchExpressions:
+        - key: guard
+          operator: In
+          values: ["enforce"]
+    clientConfig:
+      service:
+        name: k8s-guard
+        namespace: k8s-guard
+        path: /validate
+        port: 443
+      caBundle: ${CA_BUNDLE}
